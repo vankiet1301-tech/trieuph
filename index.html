@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trò chơi: Cấu hình Electron</title>
+    <style>
+        :root {
+            --primary: #6c5ce7;
+            --secondary: #a29bfe;
+            --bg: #f0f3f7;
+            --success: #00b894;
+            --fail: #d63031;
+            --card-back: #0984e3;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #74ebd5 0%, #acb6e5 100%);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 95%;
+            max-width: 800px;
+            text-align: center;
+            position: relative;
+        }
+
+        .hidden { display: none !important; }
+
+        /* Form nhập liệu */
+        .input-group { margin: 15px 0; }
+        input {
+            padding: 12px;
+            width: 80%;
+            border: 2px solid var(--secondary);
+            border-radius: 10px;
+            font-size: 16px;
+        }
+
+        /* Nút bấm */
+        .btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .btn:hover { transform: scale(1.05); background: #5b4cc4; }
+
+        /* Thông số game */
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary);
+        }
+
+        /* Lưới thẻ */
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            perspective: 1000px;
+        }
+
+        .card {
+            aspect-ratio: 3/4;
+            position: relative;
+            cursor: pointer;
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
+        }
+
+        .card.flipped { transform: rotateY(180deg); }
+        .card.matched { visibility: hidden; }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+            padding: 5px;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            border: 2px solid white;
+            box-sizing: border-box;
+            word-break: break-word;
+        }
+
+        .card-front {
+            background: var(--card-back);
+            color: white;
+        }
+
+        .card-back {
+            background: #fff;
+            color: #333;
+            transform: rotateY(180deg);
+        }
+
+        /* Modal Giải thích */
+        #feedback-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            border-radius: 20px;
+        }
+        #feedback-msg { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+        #explanation { padding: 20px; color: #555; line-height: 1.5; }
+
+    </style>
+</head>
+<body>
+
+<div class="container" id="app">
+    <div id="login-screen">
+        <h1 style="color: var(--primary);">🧪 Lật Thẻ Electron</h1>
+        <p>Ôn tập số hiệu nguyên tử (Z) và Cấu hình Electron</p>
+        <div class="input-group">
+            <input type="text" id="playerName" placeholder="Nhập họ và tên học sinh...">
+        </div>
+        <div class="input-group">
+            <input type="text" id="playerClass" placeholder="Nhập lớp...">
+        </div>
+        <button class="btn" onclick="startGame()">Bắt đầu học</button>
+    </div>
+
+    <div id="game-screen" class="hidden">
+        <div class="stats">
+            <div>⏱ <span id="timer">0</span>s</div>
+            <div>⭐ Điểm: <span id="score">0</span></div>
+        </div>
+        <div class="game-grid" id="grid"></div>
+    </div>
+
+    <div id="feedback-overlay" class="hidden">
+        <div id="feedback-msg"></div>
+        <div id="explanation"></div>
+        <button class="btn" onclick="hideFeedback()">Tiếp tục</button>
+    </div>
+
+    <div id="end-screen" class="hidden">
+        <h1 style="color: var(--success);">🎉 Hoàn thành!</h1>
+        <div id="result-summary" style="font-size: 18px; line-height: 2;"></div>
+        <button class="btn" onclick="location.reload()" style="margin-top: 20px;">Chơi lại</button>
+    </div>
+</div>
+
+<script>
+    const pairs = [
+        { z: 'Z = 1', config: '1s¹', exp: 'Hydro: Chỉ có 1 electron điền vào phân lớp 1s.' },
+        { z: 'Z = 2', config: '1s²', exp: 'Heli: 2 electron lấp đầy phân lớp 1s.' },
+        { z: 'Z = 6', config: '1s² 2s² 2p²', exp: 'Cacbon: Có 6 electron, lớp ngoài cùng là lớp 2.' },
+        { z: 'Z = 7', config: '1s² 2s² 2p³', exp: 'Nitơ: Có 7 electron, theo quy tắc Hund có 3e độc thân ở 2p.' },
+        { z: 'Z = 8', config: '1s² 2s² 2p⁴', exp: 'Oxy: Có 8 electron, thuộc chu kì 2, nhóm VIA.' },
+        { z: 'Z = 11', config: '[Ne] 3s¹', exp: 'Natri: 11 electron, là kim loại kiềm nhóm IA.' },
+        { z: 'Z = 13', config: '[Ne] 3s² 3p¹', exp: 'Nhôm: Có 13 electron, electron cuối cùng điền vào phân lớp p.' },
+        { z: 'Z = 17', config: '[Ne] 3s² 3p⁵', exp: 'Clo: Có 17 electron, là phi kim mạnh nhóm VIIA.' },
+        { z: 'Z = 19', config: '[Ar] 4s¹', exp: 'Kali: Mức năng lượng 4s thấp hơn 3d nên electron điền vào 4s trước.' },
+        { z: 'Z = 20', config: '[Ar] 4s²', exp: 'Canxi: Có 20 electron, kết thúc ở phân lớp 4s².' }
+    ];
+
+    let cards = [];
+    let flippedCards = [];
+    let score = 0;
+    let seconds = 0;
+    let timerInterval;
+    let canClick = true;
+
+    // Audio Context cho âm thanh tự động
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playSound(freq, type) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+    }
+
+    function startGame() {
+        const name = document.getElementById('playerName').value;
+        const className = document.getElementById('playerClass').value;
+        if(!name || !className) return alert("Vui lòng nhập tên và lớp!");
+
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('game-screen').classList.remove('hidden');
+
+        // Tạo bộ thẻ 20 cái
+        let deck = [];
+        pairs.forEach((pair, index) => {
+            deck.push({ type: 'z', content: pair.z, pairId: index });
+            deck.push({ type: 'config', content: pair.config, pairId: index });
+        });
+
+        // Xáo bài
+        deck.sort(() => Math.random() - 0.5);
+
+        const grid = document.getElementById('grid');
+        deck.forEach((item, index) => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.innerHTML = `
+                <div class="card-face card-front">?</div>
+                <div class="card-face card-back">${item.content}</div>
+            `;
+            card.onclick = () => flipCard(card, item);
+            grid.appendChild(card);
+        });
+
+        // Chạy đồng hồ
+        timerInterval = setInterval(() => {
+            seconds++;
+            document.getElementById('timer').innerText = seconds;
+        }, 1000);
+    }
+
+    function flipCard(cardEl, data) {
+        if(!canClick || cardEl.classList.contains('flipped') || flippedCards.length >= 2) return;
+
+        cardEl.classList.add('flipped');
+        flippedCards.push({ el: cardEl, data: data });
+
+        if(flippedCards.length === 2) {
+            canClick = false;
+            setTimeout(checkMatch, 600);
+        }
+    }
+
+    function checkMatch() {
+        const [c1, c2] = flippedCards;
+        if(c1.data.pairId === c2.data.pairId && c1.data.type !== c2.data.type) {
+            // Đúng
+            playSound(880, 'sine'); // Ting
+            score += 10;
+            document.getElementById('score').innerText = score;
+            setTimeout(() => {
+                c1.el.classList.add('matched');
+                c2.el.classList.add('matched');
+                flippedCards = [];
+                canClick = true;
+                if(document.querySelectorAll('.card:not(.matched)').length === 0) endGame();
+            }, 400);
+        } else {
+            // Sai
+            playSound(150, 'sawtooth'); // Bzzzzz
+            showFeedback(c1.data.pairId, c2.data.pairId);
+        }
+    }
+
+    function showFeedback(id1, id2) {
+        const overlay = document.getElementById('feedback-overlay');
+        const msg = document.getElementById('feedback-msg');
+        const exp = document.getElementById('explanation');
+        
+        msg.innerText = "❌ Chưa chính xác!";
+        msg.style.color = "var(--fail)";
+        
+        // Lấy thông tin giải thích của thẻ đầu tiên đã lật
+        const info = pairs[id1];
+        exp.innerHTML = `<strong>${info.z}</strong> có cấu hình là <strong>${info.config}</strong>.<br><br>Ghi nhớ: ${info.exp}`;
+        
+        overlay.classList.remove('hidden');
+    }
+
+    function hideFeedback() {
+        document.getElementById('feedback-overlay').classList.add('hidden');
+        flippedCards.forEach(c => c.el.classList.remove('flipped'));
+        flippedCards = [];
+        canClick = true;
+    }
+
+    function endGame() {
+        clearInterval(timerInterval);
+        document.getElementById('game-screen').classList.add('hidden');
+        document.getElementById('end-screen').classList.remove('hidden');
+        
+        const name = document.getElementById('playerName').value;
+        const className = document.getElementById('playerClass').value;
+        
+        document.getElementById('result-summary').innerHTML = `
+            Học sinh: <b>${name}</b> - Lớp: <b>${className}</b><br>
+            Điểm số: <b style="color:var(--success)">${score} điểm</b><br>
+            Thời gian hoàn thành: <b>${seconds} giây</b>
+        `;
+    }
+</script>
+
+</body>
+</html>
